@@ -1,7 +1,6 @@
 from flask import Blueprint, request, jsonify, g
 from app.utils.jwt_helper import token_required
 from app import mongo
-from datetime import datetime
 
 profile_bp = Blueprint("profile", __name__)
 
@@ -9,28 +8,16 @@ profile_bp = Blueprint("profile", __name__)
 @profile_bp.route("/", methods=["GET"])
 @token_required
 def get_profile():
-    # Always match user_id as string
     user = mongo.db.users.find_one(
-        {"user_id": str(g.user_id)},
+        {"user_id": g.user_id},
         {"_id": 0, "password": 0}
     )
 
     if not user:
-        # Auto-create minimal profile so 404 never happens again
-        new_user = {
-            "user_id": str(g.user_id),
-            "firstName": "",
-            "lastName": "",
-            "email": "",
-            "phone": "",
-            "location": "",
-            "role": "user",
-            "department": "",
-            "timezone": "",
-            "created_at": datetime.utcnow()
-        }
-        mongo.db.users.insert_one(new_user)
-        user = {k: v for k, v in new_user.items() if k != "password"}
+        # If this fires after the login fix, there is a real bug. Do NOT mask
+        # it by inserting a phantom user (the old behaviour caused duplicate
+        # blank profiles on every fresh login).
+        return jsonify({"error": "User not found"}), 404
 
     return jsonify(user), 200
 
@@ -53,7 +40,7 @@ def update_profile():
         return jsonify({"error": "No valid fields to update"}), 400
 
     result = mongo.db.users.update_one(
-        {"user_id": str(g.user_id)},
+        {"user_id": g.user_id},
         {"$set": update_data}
     )
 

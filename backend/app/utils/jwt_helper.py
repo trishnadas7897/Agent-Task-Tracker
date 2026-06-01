@@ -9,9 +9,20 @@ __all__ = ["generate_jwt_token", "token_required"]
 # 🔐 Generate JWT Token
 def generate_jwt_token(user_id: str) -> str:
     """
-    Generates a JWT token with the given user_id.
-    Expiration time defaults to 1 day (configurable via JWT_EXP_DAYS in app config).
+    Generate a JWT for an authenticated user.
+
+    CONTRACT: `user_id` MUST be the canonical UUID stored on the user document
+    (the `user_id` field), NOT the Mongo `_id` ObjectId. Every downstream query
+    in this app filters by {"user_id": <uuid>}; signing with `_id` will cause
+    silent empty-result bugs in tasks/logs/profile.
+
+    Expiration defaults to 1 day (configurable via JWT_EXP_DAYS in app config).
     """
+    if not isinstance(user_id, str) or len(user_id) != 36 or user_id.count("-") != 4:
+        raise ValueError(
+            "generate_jwt_token expects a UUID4 string (user_id), not a Mongo ObjectId"
+        )
+
     expiry_days = current_app.config.get("JWT_EXP_DAYS", 1)
     payload = {
         "user_id": user_id,

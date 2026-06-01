@@ -1,8 +1,10 @@
 import axios from "axios";
 
-// Create an Axios instance with base settings
+// Base URL is build-time-inlined by Vite from VITE_API_URL. To change it after
+// deploy you MUST redeploy - there is no runtime config. localhost is a dev
+// fallback only.
 const axiosInstance = axios.create({
-  baseURL: "http://localhost:5000", // Flask backend URL
+  baseURL: import.meta.env.VITE_API_URL ?? "http://localhost:5000",
 });
 
 // Request interceptor to attach token

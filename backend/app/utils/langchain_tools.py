@@ -9,8 +9,14 @@ from pymongo.errors import PyMongoError
 load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_API_ENDPOINT = os.getenv("GEMINI_API_ENDPOINT")
-GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME")  # For reference only
+# Default to 2.5-flash because the free tier no longer serves 1.5/2.0 flash models.
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-2.5-flash")
+# Build the endpoint from the model name so they can never drift apart.
+# Callers may still override with GEMINI_API_ENDPOINT for a different model/version.
+GEMINI_API_ENDPOINT = os.getenv(
+    "GEMINI_API_ENDPOINT",
+    f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL_NAME}:generateContent",
+)
 
 def test_gemini_api():
     headers = {
@@ -53,7 +59,8 @@ def get_gemini_response(prompt: str) -> str | None:
     }
 
     try:
-        response = requests.post(GEMINI_API_ENDPOINT, headers=headers, json=payload, timeout=20)
+        # 30s headroom: 2.5 Flash + Render free-tier cold start can both eat budget.
+        response = requests.post(GEMINI_API_ENDPOINT, headers=headers, json=payload, timeout=30)
         if response.status_code != 200:
             print(f"Gemini API error {response.status_code}: {response.text}")
             return None

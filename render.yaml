@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: agent-task-tracker-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # --timeout 120 must exceed the Gemini timeout (30s) plus cold-start slack,
+    # or gunicorn will kill the worker mid-request.
+    # --workers 1 --threads 4 keeps memory under the 512 MB free cap while still
+    # handling the blocking Gemini HTTP call concurrently.
+    startCommand: gunicorn run:app --workers 1 --threads 4 --timeout 120 --bind 0.0.0.0:$PORT
+    healthCheckPath: /health
+    envVars:
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXP_DAYS
+        value: "1"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL_NAME
+        value: gemini-2.5-flash
+      - key: CORS_ORIGINS
+        sync: false

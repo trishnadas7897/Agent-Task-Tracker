@@ -24,3 +24,16 @@ yarn-error.log*
 .vscode/
 .DS_Store
 .github/
+
+# --- deploy hardening ---
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+tempCodeRunnerFile.js
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+dist/

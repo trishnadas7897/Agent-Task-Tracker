@@ -1,7 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app.models.user_model import get_user_by_email, create_user
 from app.utils.jwt_helper import generate_jwt_token
-from app import mongo
 import bcrypt
 import uuid
 
@@ -50,8 +49,13 @@ def login():
     if not user or not bcrypt.checkpw(password.encode('utf-8'), user["password"]):
         return jsonify({"error": "Invalid credentials"}), 401
 
-    token = generate_jwt_token(str(user["_id"]))
-    
+    # Always sign with the canonical UUID stored on the user doc.
+    # `_id` is a Mongo internal detail and must never leak into JWT claims,
+    # otherwise downstream queries filtering by {"user_id": <uuid>} will all miss.
+    if "user_id" not in user:
+        return jsonify({"error": "Account is malformed, contact support"}), 500
+
+    token = generate_jwt_token(user["user_id"])
 
     return jsonify({
         "token": token,
