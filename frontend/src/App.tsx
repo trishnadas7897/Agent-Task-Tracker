@@ -41,9 +41,6 @@ const App = () => (
 {/* Root - redirect */}
 <Route path="/" element={<RootRedirect />} />
 
-php-template
-Copy
-Edit
       {/* Auth routes */}
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
