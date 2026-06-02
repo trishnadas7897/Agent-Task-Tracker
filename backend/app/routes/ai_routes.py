@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, g, request
+from flask import Blueprint, jsonify, g
 from app.utils.jwt_helper import token_required
 from app.models.task_model import get_task_by_id
 from app.utils.langchain_tools import run_agent_for_task
@@ -17,7 +17,6 @@ def run_ai_for_task_route(task_id):
     """
     try:
         user_id = g.user_id
-        print(f"Received JSON body: {request.get_json()}")
 
         # Ensure task exists
         task = get_task_by_id(task_id, user_id)
