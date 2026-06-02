@@ -5,7 +5,10 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-   base: "/kpi-agent-dashboard/",
+  // Base is "/" by default (Vercel / custom domain at the root). For a
+  // GitHub-Pages-style sub-path deploy, set VITE_BASE=/kpi-agent-dashboard/
+  // at build time. Trailing slash is required.
+  base: process.env.VITE_BASE || "/",
   server: {
     host: "::",
     port: 8080,
