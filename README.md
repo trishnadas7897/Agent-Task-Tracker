@@ -173,7 +173,35 @@ All protected endpoints require `Authorization: Bearer <jwt>`. Error envelope: `
 
 ## Quick start
 
-### 0. Prerequisites
+### Option A - one-command stack with Docker (recommended)
+
+If you have Docker, the whole platform (MongoDB + Flask API + React SPA) comes up with one command:
+
+```bash
+git clone git@github.com:trishnadas7897/Agent-Task-Tracker.git
+cd Agent-Task-Tracker
+
+# Put a real Gemini key in .env (or export it inline). Everything else has
+# sane defaults baked into docker-compose.yml.
+echo "GEMINI_API_KEY=your-google-ai-studio-key" > .env
+
+docker compose up --build
+# Frontend: http://localhost:8080
+# API:      http://localhost:5000  (Swagger at /docs)
+# Mongo:    mongodb://localhost:27017
+```
+
+The build uses Python 3.12.7 (matches Render), runs gunicorn as a non-root user with the same `1 worker / 4 threads / 120s timeout` config as production, and serves the Vite build through nginx with the SPA fallback. Health checks for both services are wired in - `docker compose ps` will tell you when they're healthy.
+
+To rebuild the frontend bundle against a different backend URL, pass it as a build arg:
+
+```bash
+VITE_API_URL=https://your-api.example.com docker compose up --build frontend
+```
+
+### Option B - run halves manually
+
+#### 0. Prerequisites
 
 - **Python** 3.10+
 - **Node.js** 18+ and **npm** 9+
@@ -271,7 +299,7 @@ Agent-Task-Tracker/
 - [ ] Pytest integration tests + Vitest + React Testing Library coverage gates.
 - [ ] Refresh-token rotation + short-lived access tokens.
 - [ ] Per-user Gemini-token usage metering and quotas.
-- [ ] Dockerfile + `docker-compose.yml` for one-command local stack.
+- [x] Dockerfile (backend, frontend) + `docker-compose.yml` for one-command local stack.
 
 ---
 
