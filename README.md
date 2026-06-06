@@ -2,6 +2,10 @@
 
 > **KPI Agent** - an AI-powered task-automation platform that turns plain-English task descriptions into Gemini-driven, fully logged, auditable AI executions.
 
+- Live API: https://agent-task-tracker-8avp.onrender.com (health: `/health`, Swagger: `/docs`)
+- Live UI: set this once Vercel is deployed (see [docs/DEPLOY_LIVE.md](docs/DEPLOY_LIVE.md))
+- LLM provider switch: `LLM_PROVIDER=gemini` (default, free) or `LLM_PROVIDER=groq` - both free tier, both `$0`.
+
 ![Python](https://img.shields.io/badge/python-3.10+-3776AB?logo=python&logoColor=white)
 ![Flask](https://img.shields.io/badge/flask-3.1-000000?logo=flask&logoColor=white)
 ![MongoDB](https://img.shields.io/badge/mongo-6.0+-47A248?logo=mongodb&logoColor=white)
