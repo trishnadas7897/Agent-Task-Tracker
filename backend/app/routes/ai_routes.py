@@ -46,11 +46,16 @@ def run_ai_for_task_route(task_id):
         # Debug print for backend logs
         print(f"Agentic AI completed for task {task_id} by user {user_id}. Steps completed: {context.get('steps_completed')}")
         
-        # Return the AI response and metadata as JSON
+        # Return the AI response and metadata as JSON. The orchestrator now
+        # threads three agents (analyzer/executor/validator) and persists their
+        # trace + validator verdict; surface them so the UI and tests can see
+        # which agents ran and how the validator scored the draft.
         return jsonify({
             "message": "Agentic AI task completed",
             "ai_response": context.get("results"),
             "steps_completed": context.get("steps_completed"),
+            "validator_verdict": context.get("validator_verdict"),
+            "agent_trace": context.get("agent_trace"),
         }), 200
 
     except Exception as e:
