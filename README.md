@@ -18,14 +18,13 @@
 
 Most teams want to "plug an LLM into their workflow" but end up with throwaway scripts, no audit trail, and no UI to hand to non-engineers.
 
-**Agent Task Tracker** is the missing control plane. Users sign up, define a task once (title + description + type + schedule + priority), and then trigger a **multi-step agentic loop** that:
+**Agent Task Tracker** is the missing control plane. Users sign up, define a task once (title + description + type + schedule + priority), and then trigger a **three-agent pipeline** that:
 
-1. Loads the task from MongoDB.
-2. Builds a structured prompt for the Gemini API.
-3. Post-processes the response.
-4. Writes the final answer, progress, status and full trace back to MongoDB.
+1. **AnalyzerAgent** reads the task and emits a structured INTENT / ENTITIES / APPROACH analysis.
+2. **ExecutorAgent** uses the analyzer's output (plus a task-type-specific persona) to produce the actual response.
+3. **ValidatorAgent** reviews the executor's draft, returns APPROVE or REVISE, and supplies a corrected response when revising.
 
-Every execution is captured in an immutable activity-log collection so ops, support and product teams can search, filter and audit what the AI did, when, and for whom.
+Every agent is a separate class under [`backend/app/agents/`](backend/app/agents/) with its own LangChain `PromptTemplate` and its own Gemini round-trip. The orchestrator threads each agent's output into the next agent's input and persists the full multi-agent trace to MongoDB - so the activity log shows which agent fired, how long it took, and what it produced.
 
 **Concrete use-cases shipped today:**
 
@@ -51,10 +50,10 @@ flowchart LR
         CORS["flask-cors"]
         MW["@token_required<br/>(PyJWT HS256)"]
         BP["Blueprints:<br/>auth / tasks / ai / logs / profile"]
-        AGENT["langchain_tools.run_agent_for_task<br/>analyze -> call -> post-process -> finalize"]
+        AGENTS["app/agents/orchestrator.py<br/>Analyzer -> Executor -> Validator"]
         DOCS["Swagger UI<br/>flask-restx /docs"]
         CORS --> MW --> BP
-        BP --> AGENT
+        BP --> AGENTS
         BP --> DOCS
     end
 
@@ -69,9 +68,9 @@ flowchart LR
     AX -- "Bearer JWT" --> CORS
     BP --> USERS
     BP --> TASKS
-    AGENT --> GEMINI
-    AGENT --> TASKS
-    AGENT --> LOGS
+    AGENTS --> GEMINI
+    AGENTS --> TASKS
+    AGENTS --> LOGS
 ```
 
 **Request lifecycle (Run-AI path):**
@@ -81,12 +80,12 @@ React page  ->  axios + Bearer JWT
             ->  Flask CORS
             ->  @token_required (decodes JWT, sets g.user_id)
             ->  /tasks/<task_id>/run-ai
-            ->  run_agent_for_task(task_id, user_id)
-                 1. analyze_task        (load task from MongoDB)
-                 2. call_gemini_api     (PromptTemplate -> HTTPS POST)
-                 3. postprocess_response
-                 4. finalize_task       (update tasks, insert logs)
-            ->  JSON { ai_response, steps_completed }
+            ->  app.agents.run_multi_agent_pipeline(task_id, user_id)
+                 1. AnalyzerAgent   (PromptTemplate -> Gemini call -> AgentRun)
+                 2. ExecutorAgent   (PromptTemplate -> Gemini call -> AgentRun)
+                 3. ValidatorAgent  (PromptTemplate -> Gemini call -> AgentRun)
+                 -> persist agent_trace + final answer to tasks + logs
+            ->  JSON { ai_response, validator_verdict, steps_completed, agent_trace }
 ```
 
 ---
@@ -94,8 +93,9 @@ React page  ->  axios + Bearer JWT
 ## Key engineering highlights
 
 - **Stateless JWT middleware** - a single `@token_required` decorator wraps every protected endpoint, decodes the HS256 token, and binds `g.user_id` for the request. No per-request session DB lookups.
-- **Multi-step agentic pipeline** - `run_agent_for_task` runs a deterministic 4-step loop (`analyze_task -> call_gemini_api -> postprocess_response -> finalize_task`) with explicit per-step status writes, so a failure halfway through still flips the task to `error` and writes a diagnostic log line.
-- **Prompt templating with LangChain** - Gemini prompts are built from a `PromptTemplate` rather than f-string concatenation, so structure stays decoupled from data.
+- **Three-agent pipeline** - `AnalyzerAgent` (intent + entities), `ExecutorAgent` (task-type-specific persona drafts the answer), `ValidatorAgent` (APPROVE-or-REVISE guardrail). Each one lives in its own file under [`backend/app/agents/`](backend/app/agents/), inherits a common `BaseAgent`, owns its own LangChain `PromptTemplate`, and makes its own Gemini call. Adding a fourth agent (router, summarizer, safety reviewer) is a one-class change.
+- **Per-agent trace, persisted** - every agent invocation produces an `AgentRun` with `agent_name`, `output`, `duration_ms`, and metadata. The orchestrator threads each `AgentRun` forward as context for the next agent and persists the full trace to both the `tasks` document and a `logs` row, so the activity timeline shows the whole multi-agent sequence per execution.
+- **Prompt templating with LangChain** - every agent's prompt is a `PromptTemplate` with explicit `input_variables`, not f-string concatenation, so structure stays decoupled from data and the variable contract is statically inspectable.
 - **Audit-first data model** - every AI execution is double-written (task document + dedicated `logs` collection), giving a permanent activity timeline independent of task-document mutation.
 - **Hardened API surface** - bcrypt password hashing, scoped CORS origins, JSON-only error envelope `{ error, details }`, 20 s Gemini timeout, and explicit `error` status on any unhandled exception in the agent loop.
 - **Swagger out-of-the-box** - `flask-restx` mounts a live, browsable API explorer at `/docs` so reviewers don't need Postman.
@@ -273,9 +273,16 @@ Agent-Task-Tracker/
 |   |   |   |-- ai_routes.py       # /tasks/<id>/run-ai
 |   |   |   `-- logs_routes.py     # /logs
 |   |   |-- models/                # users, tasks, logs mongo helpers
+|   |   |-- agents/                # multi-agent pipeline
+|   |   |   |-- base.py            # BaseAgent + AgentRun dataclass
+|   |   |   |-- gemini_client.py   # single Gemini HTTP wrapper
+|   |   |   |-- analyzer.py        # AnalyzerAgent (intent / entities / approach)
+|   |   |   |-- executor.py        # ExecutorAgent (task-type-specific persona)
+|   |   |   |-- validator.py       # ValidatorAgent (APPROVE / REVISE guardrail)
+|   |   |   `-- orchestrator.py    # MultiAgentOrchestrator + run_multi_agent_pipeline
 |   |   `-- utils/
 |   |       |-- jwt_helper.py      # generate_jwt_token + @token_required
-|   |       `-- langchain_tools.py # multi-step agentic Gemini loop
+|   |       `-- langchain_tools.py # thin shim re-exporting run_agent_for_task
 |   |-- config.py
 |   |-- requirements.txt
 |   `-- run.py
